@@ -48,11 +48,6 @@
  */
 
 #include "userosc.h"
-
-
-#include "userosc.h"
-
-
 #define SAMPLING_FREQUENCY 48000
 
 typedef struct State {
