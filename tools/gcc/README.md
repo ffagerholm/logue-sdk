@@ -14,6 +14,9 @@ Run `./get_gcc_osx.sh` to download and unpack gcc automatically.
 
 Run `./get_gcc_linux.sh` to download and unpack gcc automatically.
 
+On 64-bit platforms it might be needed to install `gcc-multilib`, by `sudo apt-get install gcc-multilib`.
+See https://answers.launchpad.net/gcc-arm-embedded/+question/403082
+
 #### Windows Subsystem for Linux
 
 Unfortunately, only 32 bit prebuilt packages are available for Linux and WSL does not support running 32 bit ELF executables.
