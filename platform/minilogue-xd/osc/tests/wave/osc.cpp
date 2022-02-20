@@ -39,12 +39,11 @@
  */
 
 #include "userosc.h"
-#include "wavetable.h"
 #include "math.h"
+#include <wavetable.h>
 
-
-const float INDEX_INCREMENT = 1.f / CYCLE_SIZE;
-    
+static const float INDEX_INCREMENT = 1.f / WT_SIZE;
+static const float CYCLE_RATIO = CYCLE_SIZE / (float)WT_SIZE;
 
 typedef struct State {
   float w0;
@@ -63,8 +62,8 @@ enum {
 
 
 float osc_wavetable(float phase) {
-  int ix_1 = (int)floor(phase * CYCLE_SIZE);
-  int ix_2 = (ix_1 + 1) % CYCLE_SIZE;
+  int ix_1 = (int)floor(phase * WT_SIZE);
+  int ix_2 = (ix_1 + 1) % WT_SIZE;
   
   float y_lo = table[ix_1];
   float y_hi = table[ix_2];
@@ -72,7 +71,7 @@ float osc_wavetable(float phase) {
   float x_lo = ix_1 * INDEX_INCREMENT;
   float slope = (y_hi - y_lo) / INDEX_INCREMENT;
   float y_new = slope*(phase - x_lo) + y_lo;
-  return y_new
+  return y_new;
 }
 
 
@@ -80,9 +79,11 @@ void OSC_INIT(uint32_t platform, uint32_t api)
 {
   s_state.w0    = 0.f;
   s_state.phase = 0.f;
+  s_state.position = 0.f;
   s_state.lfo = s_state.lfoz = 0.f;
   s_state.flags = k_flags_none;
 }
+
 
 void OSC_CYCLE(const user_osc_param_t * const params,
                int32_t *yn,
@@ -91,6 +92,8 @@ void OSC_CYCLE(const user_osc_param_t * const params,
   const uint8_t flags = s_state.flags;
   s_state.flags = k_flags_none;
   
+  const float offset_phase = s_state.position / (float)WT_SIZE;
+
   const float w0 = s_state.w0 = osc_w0f_for_note((params->pitch)>>8, params->pitch & 0xFF);
   float phase = (flags & k_flag_reset) ? 0.f : s_state.phase;
   
@@ -103,7 +106,7 @@ void OSC_CYCLE(const user_osc_param_t * const params,
   
   for (; y != y_e; ) {
     // Main signal
-    const float sig  = osc_wavetable(phase);
+    const float sig  = osc_wavetable(offset_phase + CYCLE_RATIO*phase);
     *(y++) = f32_to_q31(sig);
     
     phase += w0;
@@ -139,7 +142,7 @@ void OSC_PARAM(uint16_t index, uint16_t value)
   case k_user_osc_param_id6:
     break;
   case k_user_osc_param_shape:
-    s_state.position = 127 * valf;
+    s_state.position = (WT_SIZE - CYCLE_SIZE) * valf;
     break;
   case k_user_osc_param_shiftshape:
     break;
