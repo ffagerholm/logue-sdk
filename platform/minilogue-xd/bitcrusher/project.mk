@@ -4,9 +4,9 @@
 
 PROJECT = bitcrusher
 
-UCSRC = main.c
+UCSRC = 
 
-UCXXSRC = 
+UCXXSRC = main.cpp
 
 UINCDIR =
 

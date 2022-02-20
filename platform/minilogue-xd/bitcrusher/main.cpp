@@ -1,5 +1,4 @@
 #include "usermodfx.h"
-#include "float_math.h"
 
 
 static const int SAMPLE_RATE = 48000;
@@ -17,6 +16,9 @@ void MODFX_INIT(uint32_t platform, uint32_t api)
 {
   s_state.bit_depth = 32;
   s_state.bit_rate = SAMPLE_RATE;
+
+  (void)platform;
+  (void)api;
 }
 
 
@@ -24,35 +26,41 @@ void MODFX_PROCESS(const float *main_xn, float *main_yn,
                    const float *sub_xn, float *sub_yn,
                    uint32_t frames)
 {
-    
+    const float * mx = main_xn;
+    float * __restrict my = main_yn;
+    const float * my_e = my + 2*frames;
+
     const int bit_depth = s_state.bit_depth;
     const int bit_rate = s_state.bit_rate;
     
-    int max_value = pow(2, bit_depth) - 1;
-    int step = SAMPLE_RATE / bit_rate;
+    const float max_value = (float)((1 << bit_depth) - 1);
+    const int step = (int)(SAMPLE_RATE / bit_rate);
 
-    const float leftFirstSample = 0.f;
-    const float rightFirstSample = 0.f;
- 
-    int i = 0;
-    while (i < frames)
+    float inLeft;
+    float inRight;
+
+    float leftFirstSample;
+    float rightFirstSample;
+
+    for (; my < my_e; )
     {
         // Get the values from the left and right channels
-        const float inLeft = main_xn[i * 2];
-        const float inRight = main_xn[i * 2 + 1];
+        inLeft = *(mx++);
+        inRight = *(mx++);
 
         // Reduce the bit_rate of the current sample 
-        leftFirstSample = si_roundf((inLeft + 1.0) * max_value) / max_value - 1.0;
-        rightFirstSample = si_roundf((inRight + 1.0) * max_value) / max_value - 1.0;
+        leftFirstSample = si_roundf((inLeft + 1.f) * max_value) / max_value - 1.f;
+        rightFirstSample = si_roundf((inRight + 1.f) * max_value) / max_value - 1.f;
  
         // This loop simulates down-sampling of the signal.
         // The same sample is used in place of the `step` next samples
-        for (int j = 0; j < step && i < frames; j++)
+        for (int j = 0; j < step && my < my_e; j++)
         {
-            main_yn[i * 2] = leftFirstSample;
-            main_yn[i * 2 + 1] = rightFirstSample;
-            // move to next position in the output buffer
-            i++;
+            *(my++) = leftFirstSample;
+            *(my++) = rightFirstSample;
+            // move to next position in the input and output buffers
+            mx++;
+            mx++;
         }
     }
 }
@@ -60,17 +68,17 @@ void MODFX_PROCESS(const float *main_xn, float *main_yn,
 
 void MODFX_PARAM(uint8_t index, int32_t value)
 {
-    // Convert fixed-point q31 format to float
-    const float valf = param_val_to_f32(value);
+    // Convert 10-bit int32_t value to float in range [0, 1]
+    const float valf = q31_to_f32(value);
 
     switch (index)
     {
         // Assign a value to rate when turning the time knob
         case k_user_modfx_param_time:
-          s_state.bit_rate = si_roundf((SAMPLE_RATE - 1)*valf + 1);
+          s_state.bit_rate = (int)((SAMPLE_RATE - 1.f)*valf + 1.f);
           break;
         case k_user_modfx_param_depth:
-          s_state.bit_depth = si_roundf(31*valf + 1);
+          s_state.bit_depth = (int)(29.f*valf + 2.f);
           break;
         default:
           break;
