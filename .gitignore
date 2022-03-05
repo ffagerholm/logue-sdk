@@ -55,8 +55,15 @@ tools/emscripten/emsdk
 *.dSYM/
 *.su
 
+# OS X
+.DS_Store
+
 # VS Code
 .vscode
 
+# Tools
+tools/logue-cli/logue-cli-osx-0.07-2b/EULA.md
+tools/logue-cli/logue-cli-osx-0.07-2b/logue-cli
 
+# Specific files to ignore
 *nogit*
