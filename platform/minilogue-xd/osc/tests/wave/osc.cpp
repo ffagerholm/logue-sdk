@@ -42,13 +42,11 @@
 #include "math.h"
 #include <wavetable.h>
 
-static const float INDEX_INCREMENT = 1.f / WT_SIZE;
-static const float CYCLE_RATIO = CYCLE_SIZE / (float)WT_SIZE;
+static const float INDEX_INCREMENT = 1.f / CYCLE_SIZE;
 
 typedef struct State {
   float w0;
   float phase;
-  int position;
   float lfo, lfoz;
   uint8_t flags;
 } State;
@@ -61,17 +59,25 @@ enum {
 };
 
 
-float osc_wavetable(float phase) {
-  int ix_1 = (int)floor(phase * WT_SIZE);
-  int ix_2 = (ix_1 + 1) % WT_SIZE;
+// Convert a note to the corrent index
+// to be used in the MIPMAP table
+int note_to_index(uint8_t note) {
+    float ix_scaled = ((float)note - NOTE_OFFSET) / NOTE_INCREMENT;
+    int index = (int)clipminmaxf(0, ix_scaled, N_ROWS - 1);
+    return index;
+}
+
+
+float osc_wavetable(float phase, int row_index) {
+  int ix_1 = (int)floor(phase * CYCLE_SIZE);
+  int ix_2 = (ix_1 + 1) % CYCLE_SIZE;       
   
-  float y_lo = table[ix_1];
-  float y_hi = table[ix_2];
+  float y_lo = table[row_index][ix_1];
+  float y_hi = table[row_index][ix_2];
 
   float x_lo = ix_1 * INDEX_INCREMENT;
   float slope = (y_hi - y_lo) / INDEX_INCREMENT;
-  float y_new = slope*(phase - x_lo) + y_lo;
-  return y_new;
+  return slope*(phase - x_lo) + y_lo;
 }
 
 
@@ -79,7 +85,6 @@ void OSC_INIT(uint32_t platform, uint32_t api)
 {
   s_state.w0    = 0.f;
   s_state.phase = 0.f;
-  s_state.position = 0.f;
   s_state.lfo = s_state.lfoz = 0.f;
   s_state.flags = k_flags_none;
 }
@@ -92,7 +97,8 @@ void OSC_CYCLE(const user_osc_param_t * const params,
   const uint8_t flags = s_state.flags;
   s_state.flags = k_flags_none;
   
-  const float offset_phase = s_state.position / (float)WT_SIZE;
+  const uint8_t note = (params->pitch)>>8;
+  const int row_index = note_to_index(note);
 
   const float w0 = s_state.w0 = osc_w0f_for_note((params->pitch)>>8, params->pitch & 0xFF);
   float phase = (flags & k_flag_reset) ? 0.f : s_state.phase;
@@ -106,7 +112,7 @@ void OSC_CYCLE(const user_osc_param_t * const params,
   
   for (; y != y_e; ) {
     // Main signal
-    const float sig  = osc_wavetable(offset_phase + CYCLE_RATIO*phase);
+    const float sig = osc_wavetable(phase, row_index);
     *(y++) = f32_to_q31(sig);
     
     phase += w0;
@@ -142,7 +148,6 @@ void OSC_PARAM(uint16_t index, uint16_t value)
   case k_user_osc_param_id6:
     break;
   case k_user_osc_param_shape:
-    s_state.position = (WT_SIZE - CYCLE_SIZE) * valf;
     break;
   case k_user_osc_param_shiftshape:
     break;
