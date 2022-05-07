@@ -68,12 +68,12 @@ void OSC_INIT(uint32_t platform, uint32_t api)
 {
   s_state.w0    = 0.f;
   s_state.phase = 0.f;
-  s_state.dist  = 0.f;
+  s_state.dist  = 0.5f;
   s_state.ff_drive = 1.f;
   s_state.fb_drive = 1.f;
-  s_state.wf_gain = -0.38461538f;
-  s_state.ff_gain = 0.61538462f;
-  s_state.fb_gain = 0.76923077f;
+  s_state.wf_gain = -0.3f;
+  s_state.ff_gain = 0.7f;
+  s_state.fb_gain = 0.3f;
   s_state.z     = 0.f;
   s_state.lfo = s_state.lfoz = 0.f;
   s_state.flags = k_flags_none;
@@ -93,7 +93,7 @@ void OSC_CYCLE(const user_osc_param_t * const params,
   const float ff_drive = s_state.ff_drive;
   const float fb_drive  = s_state.fb_drive;
 
-  const float gain_sum = s_state.wf_gain + s_state.ff_gain + s_state.fb_gain;
+  const float gain_sum = fabs(s_state.wf_gain) + fabs(s_state.ff_gain) + fabs(s_state.fb_gain);
   const float wf_gain_norm = s_state.wf_gain / gain_sum;
   const float ff_gain_norm = s_state.ff_gain / gain_sum;
   const float fb_gain_norm = s_state.fb_gain / gain_sum;
@@ -113,12 +113,12 @@ void OSC_CYCLE(const user_osc_param_t * const params,
     float p = phase;
     p = (p <= 0) ? 1.f - p : p - (uint32_t)p;
 
-    static float x = osc_sinf(p);
-    static float wf = osc_sinf(fmod(dist_mod*x, 1.0f));
-    static float ff = osc_softclipf(0.05f, ff_drive * x);
-    static float fb = osc_softclipf(0.05f, fb_drive * z);
+    const float x = osc_sinf(p);
+    const float wf = osc_sinf(dist_mod*((x+1.f) / 2.f));
+    const float ff = osc_softclipf(0.05f, ff_drive * x);
+    const float fb = osc_softclipf(0.05f, fb_drive * z);
     z = wf_gain_norm*wf + ff_gain_norm*ff + fb_gain_norm*fb;
-    // Main signal
+    
     const float sig = osc_softclipf(0.05f, z);
     *(y++) = f32_to_q31(sig);
     
@@ -145,42 +145,40 @@ void OSC_NOTEOFF(const user_osc_param_t * const params)
 
 void OSC_PARAM(uint16_t index, uint16_t value)
 {
-  
+  const float valf = param_val_to_f32(value);
   switch (index) {
-  case k_user_osc_param_id1:
-    {
-      const int16_t bipolar = value - 100; // recover signed representation
-      s_state.wf_gain = bipolar * 0.01f; // scale to [-1.f,1.f]
-    }
-    break;
-  case k_user_osc_param_id2:
-    {
-      const int16_t bipolar = value - 100; // recover signed representation
-      s_state.ff_gain = bipolar * 0.01f; // scale to [-1.f,1.f]
-    }
-    break;
-  case k_user_osc_param_id3:
-    {
-      const int16_t bipolar = value - 100; // recover signed representation
-      s_state.fb_gain = bipolar * 0.01f; // scale to [-1.f,1.f]
-    }
-    break;
-  case k_user_osc_param_id4:
-    const float valf = param_val_to_f32(value);
-    s_state.fb_drive = 1.f + valf; 
-  case k_user_osc_param_id5:
-  case k_user_osc_param_id6:
-    break;
-  case k_user_osc_param_shape:
-    const float valf = param_val_to_f32(value);
-    s_state.dist = 3.0f * valf;
-    break;
-  case k_user_osc_param_shiftshape:
-    const float valf = param_val_to_f32(value);
-    s_state.ff_drive = 1.f + valf; 
-    break;
-  default:
-    break;
+    case k_user_osc_param_id1:
+      {
+        const int16_t bipolar = value - 100; // recover signed representation
+        s_state.wf_gain = bipolar * 0.01f; // scale to [-1.f,1.f]
+      }
+      break;
+    case k_user_osc_param_id2:
+      {
+        const int16_t bipolar = value - 100; // recover signed representation
+        s_state.ff_gain = bipolar * 0.01f; // scale to [-1.f,1.f]
+      }
+      break;
+    case k_user_osc_param_id3:
+      {
+        const int16_t bipolar = value - 100; // recover signed representation
+        s_state.fb_gain = bipolar * 0.01f; // scale to [-1.f,1.f]
+      }
+      break;
+    case k_user_osc_param_id4:
+      s_state.fb_drive = 1.f + clip01f(value * 0.01f);
+      break;
+    case k_user_osc_param_id5:
+    case k_user_osc_param_id6:
+      break;
+    case k_user_osc_param_shape:
+      s_state.dist = 0.1f + 4.0f * valf;
+      break;
+    case k_user_osc_param_shiftshape:
+      s_state.ff_drive = 1.f + valf; 
+      break;
+    default:
+      break;
   }
 }
 
