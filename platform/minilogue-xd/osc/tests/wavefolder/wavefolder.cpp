@@ -32,47 +32,32 @@
 //*/
 
 /*
- * File: maxsize.cpp
- *
- * Maximum binary size oscillator test
- *
+ * File: wavefolder.cpp
+ * Author: Fredrik Fagerholm
+ * Created: 2022-05-06
+ * 
+ * Sine oscillator with naive wavefolder.
+ * 
+ * No anti-aliasing is applied!
+ * Based on https://ccrma.stanford.edu/~jatin/ComplexNonlinearities/Wavefolder.html
  */
 
 #include "userosc.h"
-
-#define k_pad_size 0x1f25
-
 typedef __uint32_t uint32_t;
 
 typedef struct State {
   float w0;
   float phase;
-  float drive;
   float dist;
+  float ff_drive;
+  float fb_drive;
+  float wf_gain, ff_gain, fb_gain;
+  float z;
   float lfo, lfoz;
   uint8_t flags;
 } State;
 
-#define DUMMY(x)   (x), (x)+1, (x)+2, (x)+3, (x)+4, (x)+5, (x)+6, (x)+7
-#define DUMMY4(x)  DUMMY(x), DUMMY((x)+8), DUMMY((x)+16), DUMMY((x)+24)
-#define DUMMY8(x)  DUMMY4(x), DUMMY4((x)+32), DUMMY4((x)+64), DUMMY4((x)+96)
-#define DUMMY16(x) DUMMY8(x), DUMMY8((x)+128), DUMMY8((x)+256), DUMMY8((x)+384)
-#define DUMMY32(x) DUMMY16(x), DUMMY16((x)+512), DUMMY16((x)+1024), DUMMY16((x)+1536)
-
 static State s_state;
-
-static const uint32_t k_pad_data[k_pad_size] __attribute__((used)) = {
-    DUMMY32(0), 
-    DUMMY32(2048),
-    DUMMY32(2*2048),
-    DUMMY16(3*2048),
-    DUMMY16(3*2048+512),
-    DUMMY16(3*2048+2*512),
-    DUMMY8(3*2048+3*512),
-    DUMMY8(3*2048+3*512+128),
-    DUMMY4(3*2048+3*512+2*128),
-    0, 1, 2, 3, 4
-};
 
 enum {
   k_flags_none = 0,
@@ -83,8 +68,13 @@ void OSC_INIT(uint32_t platform, uint32_t api)
 {
   s_state.w0    = 0.f;
   s_state.phase = 0.f;
-  s_state.drive = 1.f;
   s_state.dist  = 0.f;
+  s_state.ff_drive = 1.f;
+  s_state.fb_drive = 1.f;
+  s_state.wf_gain = -0.38461538f;
+  s_state.ff_gain = 0.61538462f;
+  s_state.fb_gain = 0.76923077f;
+  s_state.z     = 0.f;
   s_state.lfo = s_state.lfoz = 0.f;
   s_state.flags = k_flags_none;
 }
@@ -99,25 +89,37 @@ void OSC_CYCLE(const user_osc_param_t * const params,
   const float w0 = s_state.w0 = osc_w0f_for_note((params->pitch)>>8, params->pitch & 0xFF);
   float phase = (flags & k_flag_reset) ? 0.f : s_state.phase;
   
-  const float drive = s_state.drive;
   const float dist  = s_state.dist;
+  const float ff_drive = s_state.ff_drive;
+  const float fb_drive  = s_state.fb_drive;
+
+  const float gain_sum = s_state.wf_gain + s_state.ff_gain + s_state.fb_gain;
+  const float wf_gain_norm = s_state.wf_gain / gain_sum;
+  const float ff_gain_norm = s_state.ff_gain / gain_sum;
+  const float fb_gain_norm = s_state.fb_gain / gain_sum;
+
+  float z = s_state.z;
 
   const float lfo = s_state.lfo = q31_to_f32(params->shape_lfo);
   float lfoz = (flags & k_flag_reset) ? lfo : s_state.lfoz;
   const float lfo_inc = (lfo - lfoz) / frames;
-  
+
   q31_t * __restrict y = (q31_t *)yn;
   const q31_t * y_e = y + frames;
   
   for (; y != y_e; ) {
     const float dist_mod = dist + lfoz * dist;
-    
-    // Phase distortion
-    float p = phase + linintf(dist_mod, 0.f, dist_mod * osc_sinf(phase));
+
+    float p = phase;
     p = (p <= 0) ? 1.f - p : p - (uint32_t)p;
 
+    static float x = osc_sinf(p);
+    static float wf = osc_sinf(fmod(dist_mod*x, 1.0f));
+    static float ff = osc_softclipf(0.05f, ff_drive * x);
+    static float fb = osc_softclipf(0.05f, fb_drive * z);
+    z = wf_gain_norm*wf + ff_gain_norm*ff + fb_gain_norm*fb;
     // Main signal
-    const float sig  = osc_softclipf(0.05f, drive * osc_sinf(p));
+    const float sig = osc_softclipf(0.05f, z);
     *(y++) = f32_to_q31(sig);
     
     phase += w0;
@@ -125,7 +127,8 @@ void OSC_CYCLE(const user_osc_param_t * const params,
 
     lfoz += lfo_inc;
   }
-  
+
+  s_state.z = z;
   s_state.phase = phase;
   s_state.lfoz = lfoz;
 }
@@ -142,21 +145,39 @@ void OSC_NOTEOFF(const user_osc_param_t * const params)
 
 void OSC_PARAM(uint16_t index, uint16_t value)
 {
-  const float valf = param_val_to_f32(value);
   
   switch (index) {
   case k_user_osc_param_id1:
+    {
+      const int16_t bipolar = value - 100; // recover signed representation
+      s_state.wf_gain = bipolar * 0.01f; // scale to [-1.f,1.f]
+    }
+    break;
   case k_user_osc_param_id2:
+    {
+      const int16_t bipolar = value - 100; // recover signed representation
+      s_state.ff_gain = bipolar * 0.01f; // scale to [-1.f,1.f]
+    }
+    break;
   case k_user_osc_param_id3:
+    {
+      const int16_t bipolar = value - 100; // recover signed representation
+      s_state.fb_gain = bipolar * 0.01f; // scale to [-1.f,1.f]
+    }
+    break;
   case k_user_osc_param_id4:
+    const float valf = param_val_to_f32(value);
+    s_state.fb_drive = 1.f + valf; 
   case k_user_osc_param_id5:
   case k_user_osc_param_id6:
     break;
   case k_user_osc_param_shape:
-    s_state.dist = 0.3f * valf;
+    const float valf = param_val_to_f32(value);
+    s_state.dist = 3.0f * valf;
     break;
   case k_user_osc_param_shiftshape:
-    s_state.drive = 1.f + valf; 
+    const float valf = param_val_to_f32(value);
+    s_state.ff_drive = 1.f + valf; 
     break;
   default:
     break;

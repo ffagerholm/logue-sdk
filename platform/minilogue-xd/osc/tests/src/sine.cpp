@@ -40,6 +40,7 @@
 
 #include "userosc.h"
 
+typedef __uint32_t uint32_t;
 typedef struct State {
   float w0;
   float phase;
