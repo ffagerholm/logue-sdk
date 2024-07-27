@@ -1,0 +1,19 @@
+{
+    "header" : 
+    {
+        "platform" : "minilogue-xd",
+        "module" : "osc",
+        "api" : "1.1-0",
+        "dev_id" : 0,
+        "prg_id" : 0,
+        "version" : "0.1-0",
+        "name" : "dsf",
+        "num_param" : 0,
+        "params" : [
+            ["WF Gain",  -100,  100, "%"],
+            ["FF Gain",  -100,  100, "%"],
+            ["FB Gain",  -100,  100, "%"],
+            ["FB Drive", 0,  100, "%"]
+        ]
+    }
+}
