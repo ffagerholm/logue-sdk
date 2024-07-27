@@ -38,7 +38,7 @@ static const float s_fs_recip = 1.f / 48000.f;
 void MODFX_INIT(uint32_t platform, uint32_t api)
 {
   s_lfo.reset();
-  s_lfo.setF0(220.f,s_fs_recip);
+  s_lfo.setF0(220.f, s_fs_recip);
 }
 
 void MODFX_PROCESS(const float *main_xn, float *main_yn,

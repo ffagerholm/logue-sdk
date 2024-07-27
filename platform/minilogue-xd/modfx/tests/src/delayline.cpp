@@ -8,10 +8,10 @@
  * 2018 (c) Korg
  *
  */
-
 #include "usermodfx.h"
-
 #include "delayline.hpp"
+
+typedef __uint32_t uint32_t;
 
 static dsp::DualDelayLine s_delay;
 
