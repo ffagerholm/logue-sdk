@@ -288,21 +288,35 @@ float si_fabsf(float x)
   return xs.f;
 }
 
-/** Floor function
- */
-static inline __attribute__((optimize("Ofast"),always_inline))
-float si_floorf(float x)
-{
-  return (float)((uint32_t)x);
-}
+ /** Floor function (only valid for integers representable by signed 32 bit int)
+  */
+ static inline __attribute__((optimize("Ofast"),always_inline))
+ float si_floorf_c(float x)
+ { 
+    return (x < 0) ? (((int32_t)x == x) ? x : (float)((int32_t)x - 1)) : 
+                     (float)((int32_t)x);
+ }
+ 
+ static inline __attribute__((optimize("Ofast"),always_inline))
+ float si_floorf(float x)
+ { 
+    return __builtin_floorf(x);
+ }
 
-/** Ceiling function
- */
-static inline __attribute__((optimize("Ofast"),always_inline))
-float si_ceilf(float x)
-{
-  return (float)((uint32_t)x + 1);
-}
+ /** Ceiling function (only valid for integers representable by signed 32 bit int)
+  */
+ static inline __attribute__((optimize("Ofast"),always_inline))
+ float si_ceilf_c(float x)
+ {
+    return (x >= 0) ? (((int)x == x) ? x : (float)((int32_t)x + 1)) :  
+                      (float)((int32_t)x);
+ }
+
+ static inline __attribute__((optimize("Ofast"),always_inline))
+ float si_ceilf(float x)
+ { 
+    return __builtin_ceilf(x);
+ }
 
 /** Round to nearest integer.
  */
@@ -677,9 +691,10 @@ float fasterlogf(float x) {
  */
 static inline __attribute__((optimize("Ofast"), always_inline))
 float fastpow2f(float p) {
+  float offset = (p < 0) ? 1.0f : 0.0f;
   float clipp = (p < -126) ? -126.0f : p;
   int w = clipp;
-  float z = clipp - w + 1.f;
+  float z = clipp - w + offset;
   union { uint32_t i; float f; } v = { (uint32_t) ( (1 << 23) * 
       (clipp + 121.2740575f + 27.7280233f / (4.84252568f - z) - 1.49012907f * z)
       ) };
@@ -789,7 +804,7 @@ float ampdbf(const float amp) {
  */
 static inline __attribute__((optimize("Ofast"), always_inline))
 float fasterampdbf(const float amp) {
-  static const float c = 3.3219280948873626f; // 20.f / log2f(10);
+  static const float c = 6.0205999f; // 20.f / log2f(10);
   return c*fasterlog2f(amp);
 }
 
